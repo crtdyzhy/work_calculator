@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能工时计算器</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .calculator-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 500px;
+        }
+
+        h2 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 1.5rem;
+        }
+
+        .section {
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+
+        input[type="time"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            flex: 1;
+            font-size: 1rem;
+            color: #333;
+        }
+
+        button {
+            cursor: pointer;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+
+        .btn-add {
+            background-color: #e0e7ff;
+            color: #4f46e5;
+            width: 100%;
+            margin-top: 5px;
+        }
+        .btn-add:hover { background-color: #c7d2fe; }
+
+        .btn-remove {
+            background-color: #fee2e2;
+            color: #dc2626;
+            padding: 8px 12px;
+        }
+        .btn-remove:hover { background-color: #fecaca; }
+
+        .btn-calculate {
+            background-color: #10b981;
+            color: white;
+            width: 100%;
+            font-size: 1.1rem;
+            padding: 12px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        .btn-calculate:hover { background-color: #059669; }
+
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 8px;
+            color: #166534;
+            text-align: center;
+            font-size: 1.1rem;
+            line-height: 1.6;
+            display: none;
+        }
+        
+        .detail-text {
+            display: block;
+            font-size: 0.85em;
+            color: #666;
+            font-weight: normal;
+            margin-top: 5px;
+        }
+
+        .error {
+            color: #dc2626;
+            background-color: #fee2e2;
+            border-color: #fecaca;
+        }
+    </style>
+</head>
+<body>
+
+<div class="calculator-card">
+    <h2>⏱️ 智能工时计算器</h2>
+
+    <div class="section">
+        <label>工作时间</label>
+        <div class="input-group">
+            <input type="time" id="startWork" required>
+            <span>至</span>
+            <input type="time" id="endWork" required>
+        </div>
+    </div>
+
+    <div class="section">
+        <label>休息时间 (仅扣除有效重叠时间)</label>
+        <div id="breaksContainer">
+            </div>
+        <button class="btn-add" onclick="addBreakField()">+ 添加一段休息时间</button>
+    </div>
+
+    <button class="btn-calculate" onclick="calculateHours()">计算净工时</button>
+
+    <div id="result"></div>
+</div>
+
+<script>
+    // === 初始化：默认添加两段休息时间 ===
+    addBreakField('12:30', '14:00');
+    addBreakField('18:30', '19:30');
+
+    // 修改后的函数，支持传入默认时间
+    function addBreakField(defaultStart = '', defaultEnd = '') {
+        const container = document.getElementById('breaksContainer');
+        const div = document.createElement('div');
+        div.className = 'input-group break-row';
+        div.innerHTML = `
+            <input type="time" class="break-start" value="${defaultStart}" aria-label="休息开始">
+            <span>至</span>
+            <input type="time" class="break-end" value="${defaultEnd}" aria-label="休息结束">
+            <button class="btn-remove" onclick="removeBreak(this)">删除</button>
+        `;
+        container.appendChild(div);
+    }
+
+    function removeBreak(button) {
+        button.parentElement.remove();
+    }
+
+    function timeToMinutes(timeStr) {
+        if (!timeStr) return null;
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        return hours * 60 + minutes;
+    }
+
+    // 计算交集：只扣除真正落在工作时间内的休息
+    function getIntersection(range1Start, range1End, range2Start, range2End) {
+        const start = Math.max(range1Start, range2Start);
+        const end = Math.min(range1End, range2End);
+        return Math.max(0, end - start);
+    }
+
+    function calculateHours() {
+        const startWorkStr = document.getElementById('startWork').value;
+        const endWorkStr = document.getElementById('endWork').value;
+        const resultDiv = document.getElementById('result');
+
+        resultDiv.className = '';
+        resultDiv.style.display = 'block';
+
+        if (!startWorkStr || !endWorkStr) {
+            resultDiv.innerText = "⚠️ 请填写完整的上班和下班时间";
+            resultDiv.className = 'error';
+            return;
+        }
+
+        let wStart = timeToMinutes(startWorkStr);
+        let wEnd = timeToMinutes(endWorkStr);
+
+        // 处理工作时间跨天
+        if (wEnd < wStart) {
+            wEnd += 24 * 60;
+        }
+
+        const totalWorkSpan = wEnd - wStart;
+        let validBreakMinutes = 0;
+
+        const breakRows = document.querySelectorAll('.break-row');
+        
+        for (let row of breakRows) {
+            const bStartStr = row.querySelector('.break-start').value;
+            const bEndStr = row.querySelector('.break-end').value;
+
+            if (bStartStr && bEndStr) {
+                let bStart = timeToMinutes(bStartStr);
+                let bEnd = timeToMinutes(bEndStr);
+
+                // 处理休息时间跨天
+                if (bEnd < bStart) {
+                    bEnd += 24 * 60;
+                }
+
+                // 核心逻辑：计算重叠（兼容夜班跨日场景）
+                let overlap1 = getIntersection(wStart, wEnd, bStart, bEnd);
+                let overlap2 = getIntersection(wStart, wEnd, bStart + 1440, bEnd + 1440);
+
+                validBreakMinutes += Math.max(overlap1, overlap2);
+            }
+        }
+
+        let netWorkMinutes = totalWorkSpan - validBreakMinutes;
+
+        // 格式化输出
+        const hours = Math.floor(netWorkMinutes / 60);
+        const minutes = netWorkMinutes % 60;
+        
+        const totalHours = Math.floor(totalWorkSpan / 60);
+        const totalMin = totalWorkSpan % 60;
+
+        resultDiv.innerHTML = `
+            <strong>净工作时长: ${hours} 小时 ${minutes} 分钟</strong>
+            <span class="detail-text">
+                上下班跨度: ${totalHours}小时${totalMin}分<br>
+                有效扣除休息: ${validBreakMinutes} 分钟
+            </span>
+        `;
+    }
+</script>
+
+</body>
+</html>
