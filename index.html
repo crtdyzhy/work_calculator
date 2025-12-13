@@ -13,6 +13,7 @@
             align-items: center;
             min-height: 100vh;
             margin: 0;
+            padding: 20px 10px;
         }
 
         .calculator-card {
@@ -30,10 +31,48 @@
             margin-bottom: 1.5rem;
         }
 
+        .tab-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 1.5rem;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 10px;
+            text-align: center;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            color: #6b7280;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+        }
+
+        .tab.active {
+            color: #4f46e5;
+            border-bottom-color: #4f46e5;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
         .section {
             margin-bottom: 1.5rem;
             padding-bottom: 1rem;
             border-bottom: 1px solid #eee;
+        }
+
+        .section:last-child {
+            border-bottom: none;
         }
 
         label {
@@ -50,13 +89,18 @@
             align-items: center;
         }
 
-        input[type="time"] {
+        input[type="time"], input[type="number"] {
             padding: 8px;
             border: 1px solid #ddd;
             border-radius: 6px;
             flex: 1;
             font-size: 1rem;
             color: #333;
+        }
+
+        input[type="number"] {
+            width: 80px;
+            flex: none;
         }
 
         button {
@@ -94,7 +138,7 @@
         }
         .btn-calculate:hover { background-color: #059669; }
 
-        #result {
+        #result, #result2 {
             margin-top: 20px;
             padding: 15px;
             background-color: #f0fdf4;
@@ -120,6 +164,18 @@
             background-color: #fee2e2;
             border-color: #fecaca;
         }
+
+        .time-unit {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .highlight {
+            font-size: 1.3em;
+            color: #10b981;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -127,41 +183,102 @@
 <div class="calculator-card">
     <h2>⏱️ 智能工时计算器</h2>
 
-    <div class="section">
-        <label>工作时间</label>
-        <div class="input-group">
-            <input type="time" id="startWork" required>
-            <span>至</span>
-            <input type="time" id="endWork" required>
-        </div>
+    <div class="tab-container">
+        <button class="tab active" onclick="switchTab('mode1')">📊 计算净工时</button>
+        <button class="tab" onclick="switchTab('mode2')">🕐 计算下班时间</button>
     </div>
 
-    <div class="section">
-        <label>休息时间 (仅扣除有效重叠时间)</label>
-        <div id="breaksContainer">
+    <!-- 模式1：计算净工时 -->
+    <div id="mode1" class="tab-content active">
+        <div class="section">
+            <label>工作时间</label>
+            <div class="input-group">
+                <input type="time" id="startWork" required>
+                <span>至</span>
+                <input type="time" id="endWork" required>
             </div>
-        <button class="btn-add" onclick="addBreakField()">+ 添加一段休息时间</button>
+        </div>
+
+        <div class="section">
+            <label>休息时间 (仅扣除有效重叠时间)</label>
+            <div id="breaksContainer"></div>
+            <button class="btn-add" onclick="addBreakField()">+ 添加一段休息时间</button>
+        </div>
+
+        <button class="btn-calculate" onclick="calculateHours()">计算净工时</button>
+        <div id="result"></div>
     </div>
 
-    <button class="btn-calculate" onclick="calculateHours()">计算净工时</button>
+    <!-- 模式2：计算最早下班时间 -->
+    <div id="mode2" class="tab-content">
+        <div class="section">
+            <label>上班时间</label>
+            <div class="input-group">
+                <input type="time" id="startWork2" required>
+            </div>
+        </div>
 
-    <div id="result"></div>
+        <div class="section">
+            <label>目标工作时长</label>
+            <div class="input-group">
+                <div class="time-unit">
+                    <input type="number" id="targetHours" min="0" max="24" value="8">
+                    <span>小时</span>
+                </div>
+                <div class="time-unit">
+                    <input type="number" id="targetMinutes" min="0" max="59" value="0">
+                    <span>分钟</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <label>预计休息时间</label>
+            <div id="breaksContainer2"></div>
+            <button class="btn-add" onclick="addBreakField2()">+ 添加一段休息时间</button>
+        </div>
+
+        <button class="btn-calculate" onclick="calculateOffTime()">计算最早下班时间</button>
+        <div id="result2"></div>
+    </div>
 </div>
 
 <script>
-    // === 初始化：默认添加两段休息时间 ===
+    // === 初始化 ===
     addBreakField('12:30', '14:00');
     addBreakField('18:30', '19:30');
+    addBreakField2('12:30', '14:00');
+    addBreakField2('18:30', '19:30');
 
-    // 修改后的函数，支持传入默认时间
+    function switchTab(tabId) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        
+        event.target.classList.add('active');
+        document.getElementById(tabId).classList.add('active');
+    }
+
     function addBreakField(defaultStart = '', defaultEnd = '') {
         const container = document.getElementById('breaksContainer');
         const div = document.createElement('div');
         div.className = 'input-group break-row';
         div.innerHTML = `
-            <input type="time" class="break-start" value="${defaultStart}" aria-label="休息开始">
+            <input type="time" class="break-start" value="${defaultStart}">
             <span>至</span>
-            <input type="time" class="break-end" value="${defaultEnd}" aria-label="休息结束">
+            <input type="time" class="break-end" value="${defaultEnd}">
+            <button class="btn-remove" onclick="removeBreak(this)">删除</button>
+        `;
+        container.appendChild(div);
+    }
+
+    function addBreakField2(defaultStart = '', defaultEnd = '') {
+        const container = document.getElementById('breaksContainer2');
+        const div = document.createElement('div');
+        div.className = 'input-group break-row';
+        div.innerHTML = `
+            <input type="time" class="break-start" value="${defaultStart}">
+            <span>至</span>
+            <input type="time" class="break-end" value="${defaultEnd}">
             <button class="btn-remove" onclick="removeBreak(this)">删除</button>
         `;
         container.appendChild(div);
@@ -177,13 +294,26 @@
         return hours * 60 + minutes;
     }
 
-    // 计算交集：只扣除真正落在工作时间内的休息
+    function minutesToTime(minutes) {
+        const days = Math.floor(minutes / 1440);
+        minutes = minutes % 1440;
+        const hours = Math.floor(minutes / 60);
+        const mins = minutes % 60;
+        
+        let timeStr = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+        if (days > 0) {
+            timeStr += ` (次日)`;
+        }
+        return timeStr;
+    }
+
     function getIntersection(range1Start, range1End, range2Start, range2End) {
         const start = Math.max(range1Start, range2Start);
         const end = Math.min(range1End, range2End);
         return Math.max(0, end - start);
     }
 
+    // === 模式1：计算净工时 ===
     function calculateHours() {
         const startWorkStr = document.getElementById('startWork').value;
         const endWorkStr = document.getElementById('endWork').value;
@@ -201,7 +331,6 @@
         let wStart = timeToMinutes(startWorkStr);
         let wEnd = timeToMinutes(endWorkStr);
 
-        // 处理工作时间跨天
         if (wEnd < wStart) {
             wEnd += 24 * 60;
         }
@@ -209,7 +338,7 @@
         const totalWorkSpan = wEnd - wStart;
         let validBreakMinutes = 0;
 
-        const breakRows = document.querySelectorAll('.break-row');
+        const breakRows = document.querySelectorAll('#breaksContainer .break-row');
         
         for (let row of breakRows) {
             const bStartStr = row.querySelector('.break-start').value;
@@ -219,12 +348,10 @@
                 let bStart = timeToMinutes(bStartStr);
                 let bEnd = timeToMinutes(bEndStr);
 
-                // 处理休息时间跨天
                 if (bEnd < bStart) {
                     bEnd += 24 * 60;
                 }
 
-                // 核心逻辑：计算重叠（兼容夜班跨日场景）
                 let overlap1 = getIntersection(wStart, wEnd, bStart, bEnd);
                 let overlap2 = getIntersection(wStart, wEnd, bStart + 1440, bEnd + 1440);
 
@@ -234,7 +361,6 @@
 
         let netWorkMinutes = totalWorkSpan - validBreakMinutes;
 
-        // 格式化输出
         const hours = Math.floor(netWorkMinutes / 60);
         const minutes = netWorkMinutes % 60;
         
@@ -249,7 +375,97 @@
             </span>
         `;
     }
+
+    // === 模式2：计算最早下班时间（修正版）===
+    function calculateOffTime() {
+        const startWorkStr = document.getElementById('startWork2').value;
+        const targetHours = parseInt(document.getElementById('targetHours').value) || 0;
+        const targetMinutes = parseInt(document.getElementById('targetMinutes').value) || 0;
+        const resultDiv = document.getElementById('result2');
+
+        resultDiv.className = '';
+        resultDiv.style.display = 'block';
+
+        if (!startWorkStr) {
+            resultDiv.innerText = "⚠️ 请填写上班时间";
+            resultDiv.className = 'error';
+            return;
+        }
+
+        const targetWorkMinutes = targetHours * 60 + targetMinutes;
+        if (targetWorkMinutes <= 0) {
+            resultDiv.innerText = "⚠️ 目标工作时长必须大于0";
+            resultDiv.className = 'error';
+            return;
+        }
+
+        let currentTime = timeToMinutes(startWorkStr);
+        let workedMinutes = 0;
+        
+        // 收集并排序所有休息时间段
+        const breakPeriods = [];
+        const breakRows = document.querySelectorAll('#breaksContainer2 .break-row');
+        
+        for (let row of breakRows) {
+            const bStartStr = row.querySelector('.break-start').value;
+            const bEndStr = row.querySelector('.break-end').value;
+
+            if (bStartStr && bEndStr) {
+                let bStart = timeToMinutes(bStartStr);
+                let bEnd = timeToMinutes(bEndStr);
+                if (bEnd < bStart) bEnd += 1440;
+                breakPeriods.push({ start: bStart, end: bEnd });
+            }
+        }
+
+        breakPeriods.sort((a, b) => a.start - b.start);
+
+        // 逐段计算工作时间
+        for (let breakPeriod of breakPeriods) {
+            let { start, end } = breakPeriod;
+            
+            // 如果休息时间还没到，先工作到休息开始
+            if (start > currentTime) {
+                const canWork = start - currentTime;
+                const needWork = targetWorkMinutes - workedMinutes;
+                
+                if (canWork >= needWork) {
+                    // 在休息前就能完成目标工时
+                    currentTime += needWork;
+                    workedMinutes = targetWorkMinutes;
+                    break;
+                } else {
+                    // 工作到休息时间
+                    workedMinutes += canWork;
+                    currentTime = end; // 跳过休息时间
+                }
+            } else if (end > currentTime) {
+                // 当前时间在休息时间段内，跳到休息结束
+                currentTime = end;
+            }
+        }
+
+        // 如果还没完成目标工时，继续往后加
+        if (workedMinutes < targetWorkMinutes) {
+            currentTime += (targetWorkMinutes - workedMinutes);
+        }
+
+        const offTime = minutesToTime(currentTime);
+        const totalSpan = currentTime - timeToMinutes(startWorkStr);
+        const spanHours = Math.floor(totalSpan / 60);
+        const spanMins = totalSpan % 60;
+        const totalBreak = totalSpan - targetWorkMinutes;
+
+        resultDiv.innerHTML = `
+            <strong>最早下班时间: <span class="highlight">${offTime}</span></strong>
+            <span class="detail-text">
+                目标工时: ${targetHours}小时${targetMinutes}分<br>
+                总跨度: ${spanHours}小时${spanMins}分 (含休息${totalBreak}分钟)
+            </span>
+        `;
+    }
 </script>
 
 </body>
 </html>
+
